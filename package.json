@@ -1,0 +1,16 @@
+{
+  "name": "futebol-embaixadinha",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "start": "vite --host 127.0.0.1",
+    "test": "node tests/smoke.mjs"
+  },
+  "dependencies": {
+    "@vitejs/plugin-basic-ssl": "^2.1.0",
+    "vite": "^7.1.5"
+  },
+  "devDependencies": {
+    "playwright": "^1.55.0"
+  }
+}
