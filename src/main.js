@@ -16,15 +16,20 @@ const HALF_HEIGHT = WORLD_HEIGHT / 2;
 const LINK_LENGTH = 112;
 const LINK_WIDTH = 12;
 const CONTROL_SCALE = 1.35;
+const COLLISION = {
+  PENDULUM: 0x0001,
+  NET_BORDER: 0x0002,
+  NET_INNER: 0x0004
+};
 const NET = {
-  x: 108,
-  y: 126,
-  width: 174,
-  height: 236,
-  border: 6,
-  collisionPadding: 16,
-  rows: 5,
-  columns: 7
+  x: 104,
+  y: 112,
+  width: 182,
+  height: 176,
+  rows: 6,
+  columns: 9,
+  particleRadius: 4,
+  stiffness: 0.22
 };
 
 const phone = document.querySelector("#phone");
@@ -74,7 +79,7 @@ const pendulums = [
 const net = createNet();
 
 Composite.add(engine.world, [
-  ...net.borders,
+  net.composite,
   ...pendulums.flatMap((pendulum) => pendulum.parts),
   ...Object.values(controls).map((control) => control.constraint)
 ]);
@@ -92,40 +97,75 @@ Events.on(render, "afterRender", drawSceneSkin);
 Events.on(engine, "afterUpdate", keepPendulumsInPlay);
 
 function createNet() {
-  const borderOptions = {
-    isStatic: true,
-    friction: 0.02,
-    restitution: 0.08,
-    render: { visible: false }
-  };
+  const composite = Composite.create({ label: "fluid net" });
+  const nodes = [];
+  const columnGap = NET.width / (NET.columns - 1);
+  const rowGap = NET.height / (NET.rows - 1);
 
-  const bounds = getNetCollisionBounds();
-  const centerX = bounds.x + bounds.width / 2;
-  const centerY = bounds.y + bounds.height / 2;
+  for (let row = 0; row < NET.rows; row += 1) {
+    nodes[row] = [];
+
+    for (let column = 0; column < NET.columns; column += 1) {
+      const isCollider = isNetCollider(row, column);
+      const particle = Bodies.circle(NET.x + column * columnGap, NET.y + row * rowGap, NET.particleRadius, {
+        inertia: Infinity,
+        friction: 0.00001,
+        frictionAir: 0.015,
+        restitution: 0.05,
+        isStatic: row === 0 && (column === 0 || column === NET.columns - 1),
+        collisionFilter: {
+          category: isCollider ? COLLISION.NET_BORDER : COLLISION.NET_INNER,
+          mask: isCollider ? COLLISION.PENDULUM : 0
+        },
+        render: { visible: false }
+      });
+
+      nodes[row][column] = particle;
+      Composite.add(composite, particle);
+    }
+  }
+
+  for (let row = 0; row < NET.rows; row += 1) {
+    for (let column = 0; column < NET.columns; column += 1) {
+      if (column < NET.columns - 1) {
+        addNetConstraint(composite, nodes[row][column], nodes[row][column + 1], columnGap);
+      }
+
+      if (row < NET.rows - 1) {
+        addNetConstraint(composite, nodes[row][column], nodes[row + 1][column], rowGap);
+      }
+    }
+  }
 
   return {
-    borders: [
-      Bodies.rectangle(centerX, bounds.y, bounds.width + NET.border, NET.border, borderOptions),
-      Bodies.rectangle(centerX, bounds.y + bounds.height, bounds.width + NET.border, NET.border, borderOptions),
-      Bodies.rectangle(bounds.x, centerY, NET.border, bounds.height + NET.border, borderOptions),
-      Bodies.rectangle(bounds.x + bounds.width, centerY, NET.border, bounds.height + NET.border, borderOptions)
-    ]
+    composite,
+    nodes
   };
 }
 
-function getNetCollisionBounds() {
-  return {
-    x: NET.x - NET.collisionPadding,
-    y: NET.y - NET.collisionPadding,
-    width: NET.width + NET.collisionPadding * 2,
-    height: NET.height + NET.collisionPadding * 2
-  };
+function isNetCollider(row, column) {
+  return row === 0 || column === 0 || column === NET.columns - 1;
+}
+
+function addNetConstraint(composite, bodyA, bodyB, length) {
+  Composite.add(composite, Constraint.create({
+    bodyA,
+    bodyB,
+    length,
+    stiffness: NET.stiffness,
+    damping: 0.02,
+    render: { visible: false }
+  }));
 }
 
 function createPendulum({ side, x, y, tilt }) {
   const group = Body.nextGroup(true);
   const linkOptions = {
-    collisionFilter: { group },
+    collisionFilter: {
+      group,
+      category: COLLISION.PENDULUM,
+      mask: COLLISION.NET_BORDER
+    },
     density: 0.004,
     friction: 0,
     frictionAir: 0.006,
@@ -300,8 +340,6 @@ function drawSceneSkin() {
 }
 
 function drawNetSkin(context) {
-  const collisionBounds = getNetCollisionBounds();
-
   context.save();
   context.strokeStyle = "#111827";
   context.lineWidth = 2;
@@ -309,24 +347,46 @@ function drawNetSkin(context) {
   context.lineJoin = "round";
 
   for (let row = 0; row < NET.rows; row += 1) {
-    const progress = row / (NET.rows - 1);
-    const y = NET.y + progress * NET.height;
+    for (let column = 0; column < NET.columns - 1; column += 1) {
+      const from = net.nodes[row][column].position;
+      const to = net.nodes[row][column + 1].position;
 
-    drawStraightLine(context, NET.x, y, NET.x + NET.width, y);
+      drawStraightLine(context, from.x, from.y, to.x, to.y);
+    }
   }
 
   for (let column = 0; column < NET.columns; column += 1) {
-    const progress = column / (NET.columns - 1);
-    const x = NET.x + progress * NET.width;
+    for (let row = 0; row < NET.rows - 1; row += 1) {
+      const from = net.nodes[row][column].position;
+      const to = net.nodes[row + 1][column].position;
 
-    drawStraightLine(context, x, NET.y, x, NET.y + NET.height);
+      drawStraightLine(context, from.x, from.y, to.x, to.y);
+    }
   }
 
   context.strokeStyle = "#b00000";
   context.lineWidth = 3;
-  context.strokeRect(collisionBounds.x, collisionBounds.y, collisionBounds.width, collisionBounds.height);
+  drawNetBorder(context);
 
   context.restore();
+}
+
+function drawNetBorder(context) {
+  for (let column = 0; column < NET.columns - 1; column += 1) {
+    drawNodeSegment(context, net.nodes[0][column], net.nodes[0][column + 1]);
+  }
+
+  for (let row = 0; row < NET.rows - 1; row += 1) {
+    drawNodeSegment(context, net.nodes[row][0], net.nodes[row + 1][0]);
+    drawNodeSegment(context, net.nodes[row][NET.columns - 1], net.nodes[row + 1][NET.columns - 1]);
+  }
+}
+
+function drawNodeSegment(context, fromNode, toNode) {
+  const from = fromNode.position;
+  const to = toNode.position;
+
+  drawStraightLine(context, from.x, from.y, to.x, to.y);
 }
 
 function drawStraightLine(context, fromX, fromY, toX, toY) {
