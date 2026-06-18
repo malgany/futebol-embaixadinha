@@ -99,12 +99,7 @@ function createNet() {
     render: { visible: false }
   };
 
-  const bounds = {
-    x: NET.x - NET.collisionPadding,
-    y: NET.y - NET.collisionPadding,
-    width: NET.width + NET.collisionPadding * 2,
-    height: NET.height + NET.collisionPadding * 2
-  };
+  const bounds = getNetCollisionBounds();
   const centerX = bounds.x + bounds.width / 2;
   const centerY = bounds.y + bounds.height / 2;
 
@@ -115,6 +110,15 @@ function createNet() {
       Bodies.rectangle(bounds.x, centerY, NET.border, bounds.height + NET.border, borderOptions),
       Bodies.rectangle(bounds.x + bounds.width, centerY, NET.border, bounds.height + NET.border, borderOptions)
     ]
+  };
+}
+
+function getNetCollisionBounds() {
+  return {
+    x: NET.x - NET.collisionPadding,
+    y: NET.y - NET.collisionPadding,
+    width: NET.width + NET.collisionPadding * 2,
+    height: NET.height + NET.collisionPadding * 2
   };
 }
 
@@ -296,62 +300,40 @@ function drawSceneSkin() {
 }
 
 function drawNetSkin(context) {
+  const collisionBounds = getNetCollisionBounds();
+
   context.save();
-  context.strokeStyle = "#8b0000";
-  context.lineWidth = 2.4;
+  context.strokeStyle = "#111827";
+  context.lineWidth = 2;
   context.lineCap = "round";
   context.lineJoin = "round";
 
   for (let row = 0; row < NET.rows; row += 1) {
     const progress = row / (NET.rows - 1);
     const y = NET.y + progress * NET.height;
-    const leftOffset = waveOffset(row, -5);
-    const rightOffset = waveOffset(row, 4);
 
-    drawWavyLine(context, [
-      { x: NET.x + leftOffset, y },
-      { x: NET.x + NET.width * 0.34, y: y + waveOffset(row, 6) },
-      { x: NET.x + NET.width * 0.66, y: y + waveOffset(row, -4) },
-      { x: NET.x + NET.width + rightOffset, y: y + waveOffset(row, 2) }
-    ]);
+    drawStraightLine(context, NET.x, y, NET.x + NET.width, y);
   }
 
   for (let column = 0; column < NET.columns; column += 1) {
     const progress = column / (NET.columns - 1);
     const x = NET.x + progress * NET.width;
-    const topOffset = waveOffset(column, 5);
-    const bottomOffset = waveOffset(column, -4);
 
-    drawWavyLine(context, [
-      { x, y: NET.y + topOffset },
-      { x: x + waveOffset(column, -4), y: NET.y + NET.height * 0.34 },
-      { x: x + waveOffset(column, 5), y: NET.y + NET.height * 0.68 },
-      { x: x + bottomOffset, y: NET.y + NET.height }
-    ]);
+    drawStraightLine(context, x, NET.y, x, NET.y + NET.height);
   }
+
+  context.strokeStyle = "#b00000";
+  context.lineWidth = 3;
+  context.strokeRect(collisionBounds.x, collisionBounds.y, collisionBounds.width, collisionBounds.height);
 
   context.restore();
 }
 
-function drawWavyLine(context, points) {
+function drawStraightLine(context, fromX, fromY, toX, toY) {
   context.beginPath();
-  context.moveTo(points[0].x, points[0].y);
-
-  for (let index = 1; index < points.length; index += 1) {
-    const previous = points[index - 1];
-    const current = points[index];
-    const midX = (previous.x + current.x) / 2;
-    const midY = (previous.y + current.y) / 2;
-    context.quadraticCurveTo(previous.x, previous.y, midX, midY);
-  }
-
-  const last = points[points.length - 1];
-  context.lineTo(last.x, last.y);
+  context.moveTo(fromX, fromY);
+  context.lineTo(toX, toY);
   context.stroke();
-}
-
-function waveOffset(index, amplitude) {
-  return Math.sin(index * 1.7) * amplitude;
 }
 
 function drawPendulumSkin(context) {
