@@ -16,6 +16,16 @@ const HALF_HEIGHT = WORLD_HEIGHT / 2;
 const LINK_LENGTH = 112;
 const LINK_WIDTH = 12;
 const CONTROL_SCALE = 1.35;
+const NET = {
+  x: 108,
+  y: 126,
+  width: 174,
+  height: 236,
+  border: 6,
+  collisionPadding: 16,
+  rows: 5,
+  columns: 7
+};
 
 const phone = document.querySelector("#phone");
 const root = document.querySelector("#matter-root");
@@ -61,7 +71,10 @@ const pendulums = [
   })
 ];
 
+const net = createNet();
+
 Composite.add(engine.world, [
+  ...net.borders,
   ...pendulums.flatMap((pendulum) => pendulum.parts),
   ...Object.values(controls).map((control) => control.constraint)
 ]);
@@ -75,8 +88,35 @@ phone.addEventListener("pointerup", handlePointerUp);
 phone.addEventListener("pointercancel", handlePointerUp);
 phone.addEventListener("lostpointercapture", handlePointerUp);
 
-Events.on(render, "afterRender", drawPendulumSkin);
+Events.on(render, "afterRender", drawSceneSkin);
 Events.on(engine, "afterUpdate", keepPendulumsInPlay);
+
+function createNet() {
+  const borderOptions = {
+    isStatic: true,
+    friction: 0.02,
+    restitution: 0.08,
+    render: { visible: false }
+  };
+
+  const bounds = {
+    x: NET.x - NET.collisionPadding,
+    y: NET.y - NET.collisionPadding,
+    width: NET.width + NET.collisionPadding * 2,
+    height: NET.height + NET.collisionPadding * 2
+  };
+  const centerX = bounds.x + bounds.width / 2;
+  const centerY = bounds.y + bounds.height / 2;
+
+  return {
+    borders: [
+      Bodies.rectangle(centerX, bounds.y, bounds.width + NET.border, NET.border, borderOptions),
+      Bodies.rectangle(centerX, bounds.y + bounds.height, bounds.width + NET.border, NET.border, borderOptions),
+      Bodies.rectangle(bounds.x, centerY, NET.border, bounds.height + NET.border, borderOptions),
+      Bodies.rectangle(bounds.x + bounds.width, centerY, NET.border, bounds.height + NET.border, borderOptions)
+    ]
+  };
+}
 
 function createPendulum({ side, x, y, tilt }) {
   const group = Body.nextGroup(true);
@@ -250,9 +290,71 @@ function keepPendulumsInPlay() {
   }
 }
 
-function drawPendulumSkin() {
-  const context = render.context;
+function drawSceneSkin() {
+  drawPendulumSkin(render.context);
+  drawNetSkin(render.context);
+}
 
+function drawNetSkin(context) {
+  context.save();
+  context.strokeStyle = "#8b0000";
+  context.lineWidth = 2.4;
+  context.lineCap = "round";
+  context.lineJoin = "round";
+
+  for (let row = 0; row < NET.rows; row += 1) {
+    const progress = row / (NET.rows - 1);
+    const y = NET.y + progress * NET.height;
+    const leftOffset = waveOffset(row, -5);
+    const rightOffset = waveOffset(row, 4);
+
+    drawWavyLine(context, [
+      { x: NET.x + leftOffset, y },
+      { x: NET.x + NET.width * 0.34, y: y + waveOffset(row, 6) },
+      { x: NET.x + NET.width * 0.66, y: y + waveOffset(row, -4) },
+      { x: NET.x + NET.width + rightOffset, y: y + waveOffset(row, 2) }
+    ]);
+  }
+
+  for (let column = 0; column < NET.columns; column += 1) {
+    const progress = column / (NET.columns - 1);
+    const x = NET.x + progress * NET.width;
+    const topOffset = waveOffset(column, 5);
+    const bottomOffset = waveOffset(column, -4);
+
+    drawWavyLine(context, [
+      { x, y: NET.y + topOffset },
+      { x: x + waveOffset(column, -4), y: NET.y + NET.height * 0.34 },
+      { x: x + waveOffset(column, 5), y: NET.y + NET.height * 0.68 },
+      { x: x + bottomOffset, y: NET.y + NET.height }
+    ]);
+  }
+
+  context.restore();
+}
+
+function drawWavyLine(context, points) {
+  context.beginPath();
+  context.moveTo(points[0].x, points[0].y);
+
+  for (let index = 1; index < points.length; index += 1) {
+    const previous = points[index - 1];
+    const current = points[index];
+    const midX = (previous.x + current.x) / 2;
+    const midY = (previous.y + current.y) / 2;
+    context.quadraticCurveTo(previous.x, previous.y, midX, midY);
+  }
+
+  const last = points[points.length - 1];
+  context.lineTo(last.x, last.y);
+  context.stroke();
+}
+
+function waveOffset(index, amplitude) {
+  return Math.sin(index * 1.7) * amplitude;
+}
+
+function drawPendulumSkin(context) {
   context.save();
 
   for (const pendulum of pendulums) {
